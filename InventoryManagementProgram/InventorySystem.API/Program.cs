@@ -1,10 +1,16 @@
 using InventorySystem.API.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Identity.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+//Entra ID auth
+
+builder.Services.AddMicrosoftIdentityWebApiAuthentication(builder.Configuration);
+builder.Services.AddAuthorization();
 
 // Add services to the container.
 
@@ -23,6 +29,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseAuthorization();
 
 app.UseAuthorization();
 
