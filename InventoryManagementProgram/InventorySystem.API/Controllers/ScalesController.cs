@@ -1,4 +1,5 @@
 ﻿using InventorySystem.API.Data;
+using InventorySystem.API.DTOs;
 using InventorySystem.API.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -20,63 +21,132 @@ namespace InventorySystem.API.Controllers
         }
 
         // GET: api/scales
-        // Admin ser alla vågar, Personal/Kökschef ser bara sitt teams vågar
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Scale>>> GetScales()
+        public async Task<ActionResult<List<ScaleDto>>> GetScales()
         {
             var userEmail = User.FindFirst(ClaimTypes.Email)?.Value
                          ?? User.FindFirst("preferred_username")?.Value;
 
             var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
 
-            // Admin ser allt
-            if (userRoles.Contains("Admin"))
+            IQueryable<Scale> query = _context.Scales
+                .Include(s => s.Team)
+                .Include(s => s.Product);
+
+            // Admin ser allt, övriga ser bara sitt teams vågar
+            if (!userRoles.Contains("Admin"))
             {
-                return await _context.Scales
-                    .Include(s => s.Team)
-                    .Include(s => s.Product)
-                    .Include(s => s.WeightReadings.OrderByDescending(w => w.Timestamp).Take(1))
-                    .ToListAsync();
+                var dbUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == userEmail);
+
+                if (dbUser == null)
+                    return Forbid();
+
+                query = query.Where(s => s.TeamId == dbUser.TeamId);
             }
 
-            // Hitta användarens team via e-post
-            var dbUser = await _context.Users
-                .FirstOrDefaultAsync(u => u.Email == userEmail);
+            var scales = await query.Select(s => new ScaleDto
+            {
+                Id = s.Id,
+                SerialNumber = s.SerialNumber,
+                QrCode = s.QrCode,
+                TeamId = s.TeamId,
+                TeamName = s.Team.Name,
+                ProductName = s.Product != null ? s.Product.Name : null,
+                ProductUnit = s.Product != null ? s.Product.Unit : null
+            }).ToListAsync();
 
-            if (dbUser == null)
-                return Forbid();
-
-            // Personal och Kökschef ser bara sitt teams vågar
-            return await _context.Scales
-                .Where(s => s.TeamId == dbUser.TeamId)
-                .Include(s => s.Team)
-                .Include(s => s.Product)
-                .Include(s => s.WeightReadings.OrderByDescending(w => w.Timestamp).Take(1))
-                .ToListAsync();
+            return Ok(scales);
         }
 
         // GET: api/scales/5
         [HttpGet("{id}")]
-        public async Task<ActionResult<Scale>> GetScale(int id)
+        public async Task<ActionResult<ScaleDto>> GetScale(int id)
         {
             var scale = await _context.Scales
                 .Include(s => s.Team)
                 .Include(s => s.Product)
-                .Include(s => s.WeightReadings)
-                .FirstOrDefaultAsync(s => s.Id == id);
+                .Where(s => s.Id == id)
+                .Select(s => new ScaleDto
+                {
+                    Id = s.Id,
+                    SerialNumber = s.SerialNumber,
+                    QrCode = s.QrCode,
+                    TeamId = s.TeamId,
+                    TeamName = s.Team.Name,
+                    ProductName = s.Product != null ? s.Product.Name : null,
+                    ProductUnit = s.Product != null ? s.Product.Unit : null
+                })
+                .FirstOrDefaultAsync();
 
             if (scale == null) return NotFound();
-            return scale;
+            return Ok(scale);
         }
 
         // POST: api/scales
         [HttpPost]
         [Authorize(Policy = "ManagerOrAdmin")]
-        public async Task<ActionResult<Scale>> CreateScale(Scale scale)
+        public async Task<ActionResult<ScaleDto>> CreateScale(CreateScaleDto dto)
         {
+            // Kolla att teamet finns
+            var team = await _context.Teams.FindAsync(dto.TeamId);
+            if (team == null)
+                return BadRequest("Teamet finns inte.");
+
+            // Kolla att serienumret inte redan används
+            var exists = await _context.Scales
+                .AnyAsync(s => s.SerialNumber == dto.SerialNumber);
+            if (exists)
+                return Conflict("En våg med det serienumret finns redan.");
+
+            var scale = new Scale
+            {
+                SerialNumber = dto.SerialNumber,
+                QrCode = Guid.NewGuid().ToString(),
+                TeamId = dto.TeamId
+            };
+
             _context.Scales.Add(scale);
             await _context.SaveChangesAsync();
-            return CreatedAtAction(nameof(GetScale), new { id = scale.Id }, scale);
+
+            var result = new ScaleDto
+            {
+                Id = scale.Id,
+                SerialNumber = scale.SerialNumber,
+                QrCode = scale.QrCode,
+                TeamId = scale.TeamId,
+                TeamName = team.Name,
+                ProductName = null,
+                ProductUnit = null
+            };
+
+            return CreatedAtAction(nameof(GetScale), new { id = scale.Id }, result);
+        }
+
+        // PUT: api/scales/5
+        [HttpPut("{id}")]
+        [Authorize(Policy = "ManagerOrAdmin")]
+        public async Task<ActionResult> UpdateScale(int id, UpdateScaleDto dto)
+        {
+            var scale = await _context.Scales.FindAsync(id);
+            if (scale == null) return NotFound();
+
+            // Kolla att teamet finns
+            var team = await _context.Teams.FindAsync(dto.TeamId);
+            if (team == null)
+                return BadRequest("Teamet finns inte.");
+
+            // Kolla att serienumret inte redan används av en annan våg
+            var duplicate = await _context.Scales
+                .AnyAsync(s => s.SerialNumber == dto.SerialNumber && s.Id != id);
+            if (duplicate)
+                return Conflict("En annan våg har redan det serienumret.");
+
+            scale.SerialNumber = dto.SerialNumber;
+            scale.TeamId = dto.TeamId;
+
+            await _context.SaveChangesAsync();
+            return NoContent();
         }
 
         // DELETE: api/scales/5
