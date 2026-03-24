@@ -1,6 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Storage.ValueConversion.Internal;
-
-namespace InventorySystem.API.DTOs
+﻿namespace InventorySystem.API.DTOs
 {
     public class ScaleDto
     {
