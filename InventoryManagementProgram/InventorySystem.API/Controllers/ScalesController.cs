@@ -23,40 +23,66 @@ namespace InventorySystem.API.Controllers
         /// <summary>
         /// Hämtar alla vågar. Admin ser alla, övriga ser bara sitt teams vågar.
         /// </summary>
+        //[HttpGet]
+        //public async Task<ActionResult<List<ScaleDto>>> GetScales()
+        //{
+        //  var userEmail = User.FindFirst(ClaimTypes.Email)?.Value
+        //             ?? User.FindFirst("preferred_username")?.Value;
+
+        //var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+
+        //IQueryable<Scale> query = _context.Scales
+        //  .Include(s => s.Team)
+        //.Include(s => s.Product);
+
+        // Admin ser allt, övriga ser bara sitt teams vågar
+        //if (!userRoles.Contains("Admin"))
+        //{
+        //  var dbUser = await _context.Users
+        //    .FirstOrDefaultAsync(u => u.Email == userEmail);
+
+        //if (dbUser == null)
+        //  return Forbid();
+
+        //query = query.Where(s => s.TeamId == dbUser.TeamId);
+        //}
+
+        //var scales = await query.Select(s => new ScaleDto
+        //{
+        //  Id = s.Id,
+        //SerialNumber = s.SerialNumber,
+        //QrCode = s.QrCode,
+        //TeamId = s.TeamId,
+        //TeamName = s.Team.Name,
+        //ProductName = s.Product != null ? s.Product.Name : null,
+        //ProductUnit = s.Product != null ? s.Product.Unit : null
+        //}).ToListAsync();
+
+        //return Ok(scales);
+        //}
+
+        ///------------For TESTING IN SWAGGER
+        ///
+        /// <summary>
+        /// Hämtar alla vågar. Admin ser alla, övriga ser bara sitt teams vågar.
+        /// </summary>
         [HttpGet]
         public async Task<ActionResult<List<ScaleDto>>> GetScales()
         {
-            var userEmail = User.FindFirst(ClaimTypes.Email)?.Value
-                         ?? User.FindFirst("preferred_username")?.Value;
-
-            var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
-
-            IQueryable<Scale> query = _context.Scales
+            // TODO: Ta tillbaka rollkontroll efter testning
+            var scales = await _context.Scales
                 .Include(s => s.Team)
-                .Include(s => s.Product);
-
-            // Admin ser allt, övriga ser bara sitt teams vågar
-            if (!userRoles.Contains("Admin"))
-            {
-                var dbUser = await _context.Users
-                    .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-                if (dbUser == null)
-                    return Forbid();
-
-                query = query.Where(s => s.TeamId == dbUser.TeamId);
-            }
-
-            var scales = await query.Select(s => new ScaleDto
-            {
-                Id = s.Id,
-                SerialNumber = s.SerialNumber,
-                QrCode = s.QrCode,
-                TeamId = s.TeamId,
-                TeamName = s.Team.Name,
-                ProductName = s.Product != null ? s.Product.Name : null,
-                ProductUnit = s.Product != null ? s.Product.Unit : null
-            }).ToListAsync();
+                .Include(s => s.Product)
+                .Select(s => new ScaleDto
+                {
+                    Id = s.Id,
+                    SerialNumber = s.SerialNumber,
+                    QrCode = s.QrCode,
+                    TeamId = s.TeamId,
+                    TeamName = s.Team.Name,
+                    ProductName = s.Product != null ? s.Product.Name : null,
+                    ProductUnit = s.Product != null ? s.Product.Unit : null
+                }).ToListAsync();
 
             return Ok(scales);
         }
