@@ -1,0 +1,112 @@
+﻿@page "/scan"
+@inject HttpClient Http
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<PageTitle>Skanna QR-kod</PageTitle>
+
+<h3>Skanna vågens QR-kod</h3>
+
+@if (string.IsNullOrEmpty(scannedCode))
+{
+    <div id="qr-reader" style="width: 100%; max-width: 500px;"></div>
+    <p class="mt-2"><em>Rikta kameran mot QR-koden på vågen...</em></p>
+}
+else
+{
+    <div class="alert alert-success">
+        <strong>QR-kod skannad!</strong> Kod: @scannedCode
+    </div>
+
+    @if (scale != null)
+    {
+        <div class="card mt-3">
+            <div class="card-body">
+                <h5>Våg: @scale.SerialNumber</h5>
+                <p>Team: @scale.TeamName</p>
+                <p>Produkt: @(scale.ProductName ?? "Ingen produkt kopplad")</p>
+                <p>Enhet: @(scale.ProductUnit ?? "-")</p>
+            </div>
+        </div>
+    }
+    else if (notFound)
+    {
+        <div class="alert alert-warning">Ingen våg hittades med den QR-koden.</div>
+    }
+    else
+    {
+        <p><em>Söker efter våg...</em></p>
+    }
+
+    <button class="btn btn-primary mt-3" @onclick="ScanAgain">Skanna igen</button>
+}
+
+@code {
+    private string? scannedCode;
+    private ScaleDto? scale;
+    private bool notFound;
+    private DotNetObjectReference<ScanQr>? objRef;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            objRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("QrScanner.start", objRef);
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnQrCodeScanned(string code)
+    {
+        scannedCode = code;
+        notFound = false;
+        scale = null;
+        StateHasChanged();
+
+        // Sök efter vågen med QR-koden
+        try
+        {
+            var scales = await Http.GetFromJsonAsync<List<ScaleDto>>("api/scales");
+            scale = scales?.FirstOrDefault(s => s.QrCode == code);
+            if (scale == null) notFound = true;
+        }
+        catch
+        {
+            notFound = true;
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task ScanAgain()
+    {
+        scannedCode = null;
+        scale = null;
+        notFound = false;
+        StateHasChanged();
+
+        // Renderar div
+        await Task.Delay(100);
+        await JS.InvokeVoidAsync("QrScanner.start", objRef);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await JS.InvokeVoidAsync("QrScanner.stop");
+        objRef?.Dispose();
+    }
+
+    // DTO-klass
+    public class ScaleDto
+    {
+        public int Id { get; set; }
+        public string SerialNumber { get; set; } = "";
+        public string QrCode { get; set; } = "";
+        public int TeamId { get; set; }
+        public string TeamName { get; set; } = "";
+        public string? ProductName { get; set; }
+        public string? ProductUnit { get; set; }
+    }
+}
