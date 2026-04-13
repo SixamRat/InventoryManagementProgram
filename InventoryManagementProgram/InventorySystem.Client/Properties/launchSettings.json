@@ -24,9 +24,10 @@
       "dotnetRunMessages": true,
       "launchBrowser": true,
       "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}",
-      "applicationUrl": "https://localhost:7247;http://localhost:5297",
+      "applicationUrl": "https://localhost:7247;http://localhost:5297;https://192.168.0.23:7247",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
+          //Byt ut applicationURL mot lokal IP för att testa via telefon på lokalt nätverk
       }
     },
     "IIS Express": {
