@@ -20,10 +20,47 @@
         <p class="mt-2"><em>Rikta kameran mot QR-koden på vågen...</em></p>
     }
 }
+else if (editing)
+{
+    <div class="card mt-3">
+        <div class="card-body">
+            <h5>Redigera produkt på våg: @scale?.SerialNumber</h5>
+
+            <div class="mb-3">
+                <label class="form-label">Produktnamn</label>
+                <input type="text" class="form-control" @bind="editName" placeholder="T.ex. Mjölk" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Enhet</label>
+                <select class="form-select" @bind="editUnit">
+                    <option value="">Välj enhet...</option>
+                    <option value="Kg">Kg</option>
+                    <option value="Liter">Liter</option>
+                    <option value="Styck">Styck</option>
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Omräkningsfaktor (kg → enhet)</label>
+                <input type="number" class="form-control" @bind="editFactor" step="0.01" />
+                <small class="text-muted">T.ex. 1.0 för kg, 1.03 för mjölk (kg → liter)</small>
+            </div>
+
+            @if (!string.IsNullOrEmpty(saveMessage))
+            {
+                <div class="alert @saveAlertClass">@saveMessage</div>
+            }
+
+            <button class="btn btn-success me-2" @onclick="SaveProduct">Spara</button>
+            <button class="btn btn-secondary" @onclick="CancelEdit">Avbryt</button>
+        </div>
+    </div>
+}
 else
 {
     <div class="alert alert-success">
-        <strong>QR-kod skannad!</strong> Kod: @scannedCode
+        <strong>QR-kod skannad!</strong>
     </div>
 
     @if (scale != null)
@@ -34,19 +71,21 @@ else
                 <p>Team: @scale.TeamName</p>
                 <p>Produkt: @(scale.ProductName ?? "Ingen produkt kopplad")</p>
                 <p>Enhet: @(scale.ProductUnit ?? "-")</p>
+
+                <button class="btn btn-warning me-2" @onclick="StartEdit">Ändra produkt</button>
+                <button class="btn btn-primary" @onclick="ScanAgain">Skanna igen</button>
             </div>
         </div>
     }
     else if (notFound)
     {
         <div class="alert alert-warning">Ingen våg hittades med den QR-koden.</div>
+        <button class="btn btn-primary mt-3" @onclick="ScanAgain">Skanna igen</button>
     }
     else
     {
         <p><em>Söker efter våg...</em></p>
     }
-
-    <button class="btn btn-primary mt-3" @onclick="ScanAgain">Skanna igen</button>
 }
 
 @code {
@@ -54,7 +93,15 @@ else
     private ScaleDto? scale;
     private bool notFound;
     private bool cameraStarted;
+    private bool editing;
     private DotNetObjectReference<ScanQr>? objRef;
+
+    // Redigeringsfält
+    private string editName = "";
+    private string editUnit = "";
+    private double editFactor = 1.0;
+    private string? saveMessage;
+    private string saveAlertClass = "";
 
     private async Task StartCamera()
     {
@@ -86,13 +133,66 @@ else
         StateHasChanged();
     }
 
-    private async Task ScanAgain()
+    private void StartEdit()
+    {
+        editName = scale?.ProductName ?? "";
+        editUnit = scale?.ProductUnit ?? "";
+        editFactor = 1.0;
+        saveMessage = null;
+        editing = true;
+    }
+
+    private async Task SaveProduct()
+    {
+        if (scale == null) return;
+
+        if (string.IsNullOrWhiteSpace(editName) || string.IsNullOrWhiteSpace(editUnit))
+        {
+            saveMessage = "Fyll i både produktnamn och enhet.";
+            saveAlertClass = "alert-danger";
+            return;
+        }
+
+        try
+        {
+            var dto = new { Name = editName, Unit = editUnit, ConversionFactor = editFactor };
+            var response = await Http.PostAsJsonAsync($"api/products/byscale/{scale.Id}", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                scale.ProductName = editName;
+                scale.ProductUnit = editUnit;
+                saveMessage = "Produkt sparad!";
+                saveAlertClass = "alert-success";
+                editing = false;
+            }
+            else
+            {
+                saveMessage = "Kunde inte spara. Försök igen.";
+                saveAlertClass = "alert-danger";
+            }
+        }
+        catch
+        {
+            saveMessage = "Något gick fel. Kolla att API:et körs.";
+            saveAlertClass = "alert-danger";
+        }
+    }
+
+    private void CancelEdit()
+    {
+        editing = false;
+        saveMessage = null;
+    }
+
+    private void ScanAgain()
     {
         scannedCode = null;
         scale = null;
         notFound = false;
         cameraStarted = false;
-        StateHasChanged();
+        editing = false;
+        saveMessage = null;
     }
 
     public async ValueTask DisposeAsync()
