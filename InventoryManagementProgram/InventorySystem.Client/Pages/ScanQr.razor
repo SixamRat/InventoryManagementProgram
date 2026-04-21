@@ -1,7 +1,6 @@
 ﻿@page "/scan"
 @inject HttpClient Http
 @inject IJSRuntime JS
-@inject NavigationManager Navigation
 @implements IAsyncDisposable
 
 <PageTitle>Skanna QR-kod</PageTitle>
@@ -11,7 +10,15 @@
 @if (string.IsNullOrEmpty(scannedCode))
 {
     <div id="qr-reader" style="width: 100%; max-width: 500px;"></div>
-    <p class="mt-2"><em>Rikta kameran mot QR-koden på vågen...</em></p>
+
+    @if (!cameraStarted)
+    {
+        <button class="btn btn-primary mt-3" @onclick="StartCamera">Starta kameran</button>
+    }
+    else
+    {
+        <p class="mt-2"><em>Rikta kameran mot QR-koden på vågen...</em></p>
+    }
 }
 else
 {
@@ -46,26 +53,25 @@ else
     private string? scannedCode;
     private ScaleDto? scale;
     private bool notFound;
+    private bool cameraStarted;
     private DotNetObjectReference<ScanQr>? objRef;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task StartCamera()
     {
-        if (firstRender)
-        {
-            objRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("QrScanner.start", objRef);
-        }
+        objRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("QrScanner.start", objRef);
+        cameraStarted = true;
     }
 
     [JSInvokable]
     public async Task OnQrCodeScanned(string code)
     {
         scannedCode = code;
+        cameraStarted = false;
         notFound = false;
         scale = null;
         StateHasChanged();
 
-        // Sök efter vågen med QR-koden
         try
         {
             var scales = await Http.GetFromJsonAsync<List<ScaleDto>>("api/scales");
@@ -85,20 +91,16 @@ else
         scannedCode = null;
         scale = null;
         notFound = false;
+        cameraStarted = false;
         StateHasChanged();
-
-        // Renderar div
-        await Task.Delay(100);
-        await JS.InvokeVoidAsync("QrScanner.start", objRef);
     }
 
     public async ValueTask DisposeAsync()
     {
-        await JS.InvokeVoidAsync("QrScanner.stop");
+        try { await JS.InvokeVoidAsync("QrScanner.stop"); } catch { }
         objRef?.Dispose();
     }
 
-    // DTO-klass
     public class ScaleDto
     {
         public int Id { get; set; }
