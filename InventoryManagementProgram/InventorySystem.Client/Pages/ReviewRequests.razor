@@ -1,0 +1,121 @@
+﻿@page "/review"
+@inject HttpClient Http
+
+<PageTitle>Hantera ändringsförslag</PageTitle>
+
+<h3>Ändringsförslag</h3>
+
+@if (loading)
+{
+    <p><em>Laddar...</em></p>
+}
+else if (requests == null || !requests.Any())
+{
+    <div class="alert alert-info">Inga väntande förslag.</div>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Våg</th>
+                <th>Föreslagen produkt</th>
+                <th>Enhet</th>
+                <th>Föreslagen av</th>
+                <th>Åtgärd</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var request in requests)
+            {
+                <tr>
+                    <td>@request.ScaleSerialNumber</td>
+                    <td>@request.ProposedProduct</td>
+                    <td>@request.ProposedUnit</td>
+                    <td>@request.CreatedByUserName</td>
+                    <td>
+                        <button class="btn btn-success btn-sm me-1"
+                                @onclick="() => Review(request.Id, true)">
+                            Godkänn
+                        </button>
+                        <button class="btn btn-danger btn-sm"
+                                @onclick="() => Review(request.Id, false)">
+                            Neka
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div class="alert @messageClass mt-3">@message</div>
+}
+
+@code {
+    private List<ChangeRequestDto>? requests;
+    private bool loading = true;
+    private string? message;
+    private string messageClass = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRequests();
+    }
+
+    private async Task LoadRequests()
+    {
+        loading = true;
+        try
+        {
+            requests = await Http.GetFromJsonAsync<List<ChangeRequestDto>>(
+                "api/changerequests?status=Pending");
+        }
+        catch
+        {
+            message = "Kunde inte hämta förslag.";
+            messageClass = "alert-danger";
+        }
+        loading = false;
+    }
+
+    private async Task Review(int id, bool approve)
+    {
+        try
+        {
+            var dto = new { Status = approve ? "Approved" : "Denied" };
+            var response = await Http.PutAsJsonAsync($"api/changerequests/{id}/review", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                message = approve ? "Förslaget godkändes!" : "Förslaget nekades.";
+                messageClass = approve ? "alert-success" : "alert-warning";
+                await LoadRequests();
+            }
+            else
+            {
+                message = "Något gick fel.";
+                messageClass = "alert-danger";
+            }
+        }
+        catch
+        {
+            message = "Kunde inte nå API:et.";
+            messageClass = "alert-danger";
+        }
+    }
+
+    public class ChangeRequestDto
+    {
+        public int Id { get; set; }
+        public string ProposedProduct { get; set; } = "";
+        public string ProposedUnit { get; set; } = "";
+        public string Status { get; set; } = "";
+        public int ScaleId { get; set; }
+        public string ScaleSerialNumber { get; set; } = "";
+        public int CreatedByUserId { get; set; }
+        public string CreatedByUserName { get; set; } = "";
+    }
+}

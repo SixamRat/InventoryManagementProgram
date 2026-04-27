@@ -24,7 +24,7 @@ else if (editing)
 {
     <div class="card mt-3">
         <div class="card-body">
-            <h5>Redigera produkt på våg: @scale?.SerialNumber</h5>
+            <h5>Föreslå ändring på våg: @scale?.SerialNumber</h5>
 
             <div class="mb-3">
                 <label class="form-label">Produktnamn</label>
@@ -41,18 +41,12 @@ else if (editing)
                 </select>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">Omräkningsfaktor (kg → enhet)</label>
-                <input type="number" class="form-control" @bind="editFactor" step="0.01" />
-                <small class="text-muted">T.ex. 1.0 för kg, 1.03 för mjölk (kg → liter)</small>
-            </div>
-
             @if (!string.IsNullOrEmpty(saveMessage))
             {
                 <div class="alert @saveAlertClass">@saveMessage</div>
             }
 
-            <button class="btn btn-success me-2" @onclick="SaveProduct">Spara</button>
+            <button class="btn btn-success me-2" @onclick="SendChangeRequest">Skicka förslag</button>
             <button class="btn btn-secondary" @onclick="CancelEdit">Avbryt</button>
         </div>
     </div>
@@ -72,7 +66,7 @@ else
                 <p>Produkt: @(scale.ProductName ?? "Ingen produkt kopplad")</p>
                 <p>Enhet: @(scale.ProductUnit ?? "-")</p>
 
-                <button class="btn btn-warning me-2" @onclick="StartEdit">Ändra produkt</button>
+                <button class="btn btn-warning me-2" @onclick="StartEdit">Föreslå ändring</button>
                 <button class="btn btn-primary" @onclick="ScanAgain">Skanna igen</button>
             </div>
         </div>
@@ -96,10 +90,8 @@ else
     private bool editing;
     private DotNetObjectReference<ScanQr>? objRef;
 
-    // Redigeringsfält
     private string editName = "";
     private string editUnit = "";
-    private double editFactor = 1.0;
     private string? saveMessage;
     private string saveAlertClass = "";
 
@@ -137,12 +129,11 @@ else
     {
         editName = scale?.ProductName ?? "";
         editUnit = scale?.ProductUnit ?? "";
-        editFactor = 1.0;
         saveMessage = null;
         editing = true;
     }
 
-    private async Task SaveProduct()
+    private async Task SendChangeRequest()
     {
         if (scale == null) return;
 
@@ -155,27 +146,33 @@ else
 
         try
         {
-            var dto = new { Name = editName, Unit = editUnit, ConversionFactor = editFactor };
-            var response = await Http.PostAsJsonAsync($"api/products/byscale/{scale.Id}", dto);
+            // TODO: Byt ut CreatedByUserId till inloggad användare senare
+            var dto = new
+            {
+                ScaleId = scale.Id,
+                ProposedProduct = editName,
+                ProposedUnit = editUnit,
+                CreatedByUserId = 1
+            };
+
+            var response = await Http.PostAsJsonAsync("api/changerequests", dto);
 
             if (response.IsSuccessStatusCode)
             {
-                scale.ProductName = editName;
-                scale.ProductUnit = editUnit;
-                saveMessage = "Produkt sparad!";
+                saveMessage = "Ändringsförslag skickat! Väntar på godkännande från chef.";
                 saveAlertClass = "alert-success";
                 editing = false;
             }
             else
             {
-                saveMessage = "Kunde inte spara. Försök igen.";
+                saveMessage = "Kunde inte skicka förslaget. Försök igen.";
                 saveAlertClass = "alert-danger";
             }
         }
         catch
         {
             saveMessage = "Något gick fel. Kolla att API:et körs.";
-            saveAlertClass = "alert-danger";
+            saveAlertClass = "alert-danger";//Byt ut efter testning till något mer lättläst
         }
     }
 
