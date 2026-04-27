@@ -1,0 +1,133 @@
+﻿@page "/simulator"
+@inject HttpClient Http
+
+<PageTitle>Vågsimulator</PageTitle>
+
+<h3>Vågsimulator</h3>
+<p>Simulera en nätverksvåg som skickar viktdata till systemet.</p>
+
+@if (scales == null)
+{
+    <p><em>Laddar vågar...</em></p>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label">Välj våg</label>
+                <select class="form-select" @bind="selectedSerialNumber">
+                    <option value="">Välj en våg...</option>
+                    @foreach (var s in scales)
+                    {
+                        <option value="@s.SerialNumber">
+                            @s.SerialNumber — @s.TeamName
+                            (@(s.ProductName ?? "ingen produkt"))
+                        </option>
+                    }
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Vikt (kg)</label>
+                <input type="number" class="form-control" @bind="weightKg"
+                       step="0.1" min="0" placeholder="T.ex. 5.5" />
+            </div>
+
+            <button class="btn btn-primary" @onclick="SendWeight"
+                    disabled="@(string.IsNullOrEmpty(selectedSerialNumber))">
+                Skicka vikt
+            </button>
+        </div>
+    </div>
+
+    @if (result != null)
+    {
+        <div class="card mt-3">
+            <div class="card-body">
+                <h5>Resultat</h5>
+                <p>Produkt: @result.ProductName</p>
+                <p>Råvikt: @result.WeightInKg kg</p>
+                <p>Omräknat: @result.ConvertedValue @result.Unit</p>
+                <p>Tidpunkt: @result.Timestamp.ToLocalTime()</p>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-3">@errorMessage</div>
+    }
+}
+
+@code {
+    private List<ScaleDto>? scales;
+    private string selectedSerialNumber = "";
+    private double weightKg;
+    private WeightReadingResultDto? result;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            scales = await Http.GetFromJsonAsync<List<ScaleDto>>("api/scales");
+        }
+        catch
+        {
+            errorMessage = "Kunde inte hämta vågar.";
+        }
+    }
+
+    private async Task SendWeight()
+    {
+        errorMessage = null;
+        result = null;
+
+        try
+        {
+            var dto = new
+            {
+                SerialNumber = selectedSerialNumber,
+                WeightInKg = weightKg
+            };
+
+            var response = await Http.PostAsJsonAsync("api/weightreadings", dto);
+
+            if (response.IsSuccessStatusCode)
+            {
+                result = await response.Content.ReadFromJsonAsync<WeightReadingResultDto>();
+            }
+            else
+            {
+                errorMessage = "Kunde inte skicka vikten. Kolla att vågen har en produkt kopplad.";
+            }
+        }
+        catch
+        {
+            errorMessage = "Något gick fel.";
+        }
+    }
+
+    public class ScaleDto
+    {
+        public int Id { get; set; }
+        public string SerialNumber { get; set; } = "";
+        public string QrCode { get; set; } = "";
+        public int TeamId { get; set; }
+        public string TeamName { get; set; } = "";
+        public string? ProductName { get; set; }
+        public string? ProductUnit { get; set; }
+    }
+
+    public class WeightReadingResultDto
+    {
+        public int ScaleId { get; set; }
+        public string SerialNumber { get; set; } = "";
+        public double WeightInKg { get; set; }
+        public double ConvertedValue { get; set; }
+        public string Unit { get; set; } = "";
+        public string ProductName { get; set; } = "";
+        public DateTime Timestamp { get; set; }
+    }
+}
