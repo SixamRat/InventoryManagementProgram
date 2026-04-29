@@ -1,0 +1,201 @@
+﻿@page "/dashboard"
+@inject HttpClient Http
+
+<PageTitle>Dashboard</PageTitle>
+
+<h3>Översikt — Alla vågar</h3>
+
+@if (teams != null)
+{
+    <div class="mb-3">
+        <label class="form-label">Filtrera på team</label>
+        <select class="form-select" style="max-width: 300px;" @onchange="OnTeamChanged">
+            <option value="">Alla team</option>
+            @foreach (var team in teams)
+            {
+                <option value="@team.Id">@team.Name</option>
+            }
+        </select>
+    </div>
+}
+
+@if (loading)
+{
+    <p><em>Laddar...</em></p>
+}
+else if (scales == null || !scales.Any())
+{
+    <div class="alert alert-info">Inga vågar hittades.</div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th>Serienummer</th>
+                    <th>Team</th>
+                    <th>Produkt</th>
+                    <th>Senaste vikt</th>
+                    <th>Omräknat</th>
+                    <th>Senaste avläsning</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var scale in scales)
+                {
+                    <tr>
+                        <td>@scale.SerialNumber</td>
+                        <td>@scale.TeamName</td>
+                        <td>@(scale.ProductName ?? "—")</td>
+                        <td>
+                            @if (scale.LatestWeightKg.HasValue)
+                            {
+                                @($"{scale.LatestWeightKg:F2} kg")
+                            }
+                            else
+                            {
+                                <span class="text-muted">Ingen data</span>
+                            }
+                        </td>
+                        <td>
+                            @if (scale.ConvertedValue.HasValue)
+                            {
+                                @($"{scale.ConvertedValue:F2} {scale.ProductUnit ?? "kg"}")
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </td>
+                        <td>
+                            @if (scale.LastReading.HasValue)
+                            {
+                                @scale.LastReading.Value.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            }
+                            else
+                            {
+                                <span class="text-muted">Aldrig</span>
+                            }
+                        </td>
+                        <td>
+                            @if (scale.ProductName == null)
+                            {
+                                <span class="badge bg-warning">Ej konfigurerad</span>
+                            }
+                            else if (!scale.LatestWeightKg.HasValue)
+                            {
+                                <span class="badge bg-secondary">Väntar på data</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">Aktiv</span>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <div class="row mt-3">
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">@scales.Count</h5>
+                    <p class="card-text">Totalt antal vågar</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">@scales.Count(s => s.ProductName != null)</h5>
+                    <p class="card-text">Konfigurerade</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title">@scales.Count(s => s.LatestWeightKg.HasValue)</h5>
+                    <p class="card-text">Med viktdata</p>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger mt-3">@errorMessage</div>
+}
+
+@code {
+    private List<DashboardScaleDto>? scales;
+    private List<TeamDto>? teams;
+    private bool loading = true;
+    private string? errorMessage;
+    private int? selectedTeamId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            teams = await Http.GetFromJsonAsync<List<TeamDto>>("api/teams");
+        }
+        catch { }
+
+        await LoadScales();
+    }
+
+    private async Task OnTeamChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        selectedTeamId = string.IsNullOrEmpty(value) ? null : int.Parse(value);
+        await LoadScales();
+    }
+
+    private async Task LoadScales()
+    {
+        loading = true;
+        errorMessage = null;
+
+        try
+        {
+            var url = "api/dashboard/scales";
+            if (selectedTeamId.HasValue)
+            {
+                url += $"?teamId={selectedTeamId.Value}";
+            }
+
+            scales = await Http.GetFromJsonAsync<List<DashboardScaleDto>>(url);
+        }
+        catch
+        {
+            errorMessage = "Kunde inte hämta data.";
+        }
+
+        loading = false;
+    }
+
+    public class DashboardScaleDto
+    {
+        public int Id { get; set; }
+        public string SerialNumber { get; set; } = "";
+        public int TeamId { get; set; }
+        public string TeamName { get; set; } = "";
+        public string? ProductName { get; set; }
+        public string? ProductUnit { get; set; }
+        public double? LatestWeightKg { get; set; }
+        public double? ConvertedValue { get; set; }
+        public DateTime? LastReading { get; set; }
+    }
+
+    public class TeamDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+}
