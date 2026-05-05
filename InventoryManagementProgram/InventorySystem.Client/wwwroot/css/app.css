@@ -101,3 +101,47 @@ a, .btn-link {
 code {
     color: #c02d76;
 }
+
+/* Inventarielista — print header  */
+.print-header {
+    display: none;
+}
+
+/* Utskrift  */
+@media print {
+    .sidebar,
+    .top-row,
+    .no-print {
+        display: none !important;
+    }
+
+    .page {
+        display: block !important;
+    }
+
+    .content {
+        padding: 0 !important;
+    }
+
+    .print-header {
+        display: block;
+        margin-bottom: 1rem;
+    }
+
+    .table {
+        border-collapse: collapse;
+        width: 100%;
+    }
+
+        .table th,
+        .table td {
+            border: 1px solid #000 !important;
+            padding: 6px 10px;
+        }
+
+        .table thead th {
+            background-color: #eee !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+}

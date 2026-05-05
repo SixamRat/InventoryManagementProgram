@@ -1,0 +1,169 @@
+﻿@page "/inventory"
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<PageTitle>Inventarielista</PageTitle>
+
+<div class="inventory-page">
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <h3 class="mb-0">Inventarielista</h3>
+        <button class="btn btn-outline-primary" @onclick="PrintPage"
+                disabled="@(inventory == null || !inventory.Items.Any())">
+            🖨️ Skriv ut inventarielista
+        </button>
+    </div>
+
+    @if (teams != null)
+    {
+        <div class="mb-3 no-print">
+            <label class="form-label">Välj team</label>
+            <select class="form-select" style="max-width: 300px;" @onchange="OnTeamChanged">
+                <option value="">Alla team</option>
+                @foreach (var team in teams)
+                {
+                    <option value="@team.Id">@team.Name</option>
+                }
+            </select>
+        </div>
+    }
+
+    @if (loading)
+    {
+        <p><em>Laddar inventarielista...</em></p>
+    }
+    else if (inventory == null)
+    {
+        <div class="alert alert-danger">Kunde inte hämta inventarielistan.</div>
+    }
+    else if (!inventory.Items.Any())
+    {
+        <div class="alert alert-info">Inga produkter att visa.</div>
+    }
+    else
+    {
+        <div class="print-header">
+            <h2>Inventarielista</h2>
+            <p>
+                @if (!string.IsNullOrEmpty(inventory.TeamName))
+                {
+                    <strong>Team:</strong> 
+                    @inventory.TeamName
+                    <br />
+                }
+                <strong>Datum:</strong> @inventory.GeneratedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+            </p>
+        </div>
+
+        <table class="table table-bordered">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Produkt</th>
+                    <th class="text-end">Mängd</th>
+                    <th>Enhet</th>
+                    <th class="text-end no-print">Antal vågar</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    int row = 1;
+                }
+                @foreach (var item in inventory.Items)
+                {
+                    <tr>
+                        <td>@row</td>
+                        <td>@item.ProductName</td>
+                        <td class="text-end">@item.TotalQuantity.ToString("F2")</td>
+                        <td>@item.Unit</td>
+                        <td class="text-end no-print">@item.NumberOfScales</td>
+                    </tr>
+                    row++;
+                }
+            </tbody>
+        </table>
+
+        <p class="text-muted print-footer">
+            Totalt @inventory.Items.Count produkter
+        </p>
+    }
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger mt-3 no-print">@errorMessage</div>
+    }
+</div>
+
+@code {
+    private InventoryListDto? inventory;
+    private List<TeamDto>? teams;
+    private bool loading = true;
+    private string? errorMessage;
+    private int? selectedTeamId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            teams = await Http.GetFromJsonAsync<List<TeamDto>>("api/teams");
+        }
+        catch { }
+
+        await LoadInventory();
+    }
+
+    private async Task OnTeamChanged(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        selectedTeamId = string.IsNullOrEmpty(value) ? null : int.Parse(value);
+        await LoadInventory();
+    }
+
+    private async Task LoadInventory()
+    {
+        loading = true;
+        errorMessage = null;
+
+        try
+        {
+            var url = "api/inventory";
+            if (selectedTeamId.HasValue)
+            {
+                url += $"?teamId={selectedTeamId.Value}";
+            }
+
+            inventory = await Http.GetFromJsonAsync<InventoryListDto>(url);
+        }
+        catch
+        {
+            errorMessage = "Kunde inte hämta inventarielistan. Kolla att API:et körs.";
+        }
+
+        loading = false;
+    }
+
+    private async Task PrintPage()
+    {
+        await JS.InvokeVoidAsync("window.print");
+    }
+
+    public class InventoryListDto
+    {
+        public string? TeamName { get; set; }
+        public DateTime GeneratedAt { get; set; }
+        public List<InventoryItemDto> Items { get; set; } = new();
+    }
+
+    public class InventoryItemDto
+    {
+        public string ProductName { get; set; } = "";
+        public string Unit { get; set; } = "";
+        public double TotalQuantity { get; set; }
+        public int NumberOfScales { get; set; }
+    }
+
+    public class TeamDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+    }
+}
