@@ -105,7 +105,7 @@ else
     [JSInvokable]
     public async Task OnQrCodeScanned(string code)
     {
-        scannedCode = code;
+        scannedCode = code.Trim();
         cameraStarted = false;
         notFound = false;
         scale = null;
@@ -114,7 +114,7 @@ else
         try
         {
             var scales = await Http.GetFromJsonAsync<List<ScaleDto>>("api/scales");
-            scale = scales?.FirstOrDefault(s => s.QrCode == code);
+            scale = scales?.FirstOrDefault(s => s.QrCode.Equals(scannedCode, StringComparison.OrdinalIgnoreCase));
             if (scale == null) notFound = true;
         }
         catch

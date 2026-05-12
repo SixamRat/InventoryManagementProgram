@@ -10,7 +10,7 @@ namespace InventorySystem.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-   // [Authorize(Policy = "AllRoles")]
+    [Authorize(Policy = "AllRoles")]
     public class ScalesController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -20,77 +20,46 @@ namespace InventorySystem.API.Controllers
             _context = context;
         }
 
-        /// <summary>
-        /// Hämtar alla vågar. Admin ser alla, övriga ser bara sitt teams vågar.
-        /// </summary>
-        //[HttpGet]
-        //public async Task<ActionResult<List<ScaleDto>>> GetScales()
-        //{
-        //  var userEmail = User.FindFirst(ClaimTypes.Email)?.Value
-        //             ?? User.FindFirst("preferred_username")?.Value;
-
-        //var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
-
-        //IQueryable<Scale> query = _context.Scales
-        //  .Include(s => s.Team)
-        //.Include(s => s.Product);
-
-        // Admin ser allt, övriga ser bara sitt teams vågar
-        //if (!userRoles.Contains("Admin"))
-        //{
-        //  var dbUser = await _context.Users
-        //    .FirstOrDefaultAsync(u => u.Email == userEmail);
-
-        //if (dbUser == null)
-        //  return Forbid();
-
-        //query = query.Where(s => s.TeamId == dbUser.TeamId);
-        //}
-
-        //var scales = await query.Select(s => new ScaleDto
-        //{
-        //  Id = s.Id,
-        //SerialNumber = s.SerialNumber,
-        //QrCode = s.QrCode,
-        //TeamId = s.TeamId,
-        //TeamName = s.Team.Name,
-        //ProductName = s.Product != null ? s.Product.Name : null,
-        //ProductUnit = s.Product != null ? s.Product.Unit : null
-        //}).ToListAsync();
-
-        //return Ok(scales);
-        //}
-
-        ///------------For TESTING IN SWAGGER
-        ///
-        /// <summary>
-        /// Hämtar alla vågar. Admin ser alla, övriga ser bara sitt teams vågar.
-        /// </summary>
+        // Hämtar alla vågar. Admin ser alla, övriga ser bara sitt teams vågar.
         [HttpGet]
         public async Task<ActionResult<List<ScaleDto>>> GetScales()
         {
-            // TODO: Ta tillbaka rollkontroll efter testning
-            var scales = await _context.Scales
+            var userEmail = User.FindFirst(ClaimTypes.Email)?.Value
+                       ?? User.FindFirst("preferred_username")?.Value;
+
+            var userRoles = User.FindAll(ClaimTypes.Role).Select(c => c.Value).ToList();
+
+            IQueryable<Scale> query = _context.Scales
                 .Include(s => s.Team)
-                .Include(s => s.Product)
-                .Select(s => new ScaleDto
-                {
-                    Id = s.Id,
-                    SerialNumber = s.SerialNumber,
-                    QrCode = s.QrCode,
-                    TeamId = s.TeamId,
-                    TeamName = s.Team.Name,
-                    ProductName = s.Product != null ? s.Product.Name : null,
-                    ProductUnit = s.Product != null ? s.Product.Unit : null
-                }).ToListAsync();
+                .Include(s => s.Product);
+
+            // Admin ser allt, övriga ser bara sitt teams vågar
+            if (!userRoles.Contains("Admin"))
+            {
+                var dbUser = await _context.Users
+                    .FirstOrDefaultAsync(u => u.Email == userEmail);
+
+                if (dbUser == null)
+                    return Forbid();
+
+                query = query.Where(s => s.TeamId == dbUser.TeamId);
+            }
+
+            var scales = await query.Select(s => new ScaleDto
+            {
+                Id = s.Id,
+                SerialNumber = s.SerialNumber,
+                QrCode = s.QrCode,
+                TeamId = s.TeamId,
+                TeamName = s.Team.Name,
+                ProductName = s.Product != null ? s.Product.Name : null,
+                ProductUnit = s.Product != null ? s.Product.Unit : null
+            }).ToListAsync();
 
             return Ok(scales);
         }
-
-        /// <summary>
-        /// Hämtar en specifik våg med ID.
-        /// </summary>
-        /// <param name="id">Vågens ID</param>
+        // Hämtar en specifik våg med ID.
+        name="id"
         [HttpGet("{id}")]
         public async Task<ActionResult<ScaleDto>> GetScale(int id)
         {
@@ -114,20 +83,15 @@ namespace InventorySystem.API.Controllers
             return Ok(scale);
         }
 
-        /// <summary>
-        /// Registrerar en ny våg. Kräver rollen Kökschef eller Admin.
-        /// </summary>
-        /// <param name="dto">Serienummer och team-ID</param>
+        //Registrerar en ny våg. Kräver rollen Kökschef eller Admin.
         [HttpPost]
-        //[Authorize(Policy = "ManagerOrAdmin")]
+        [Authorize(Policy = "ManagerOrAdmin")]
         public async Task<ActionResult<ScaleDto>> CreateScale(CreateScaleDto dto)
         {
-            // Kolla att teamet finns
             var team = await _context.Teams.FindAsync(dto.TeamId);
             if (team == null)
                 return BadRequest("Teamet finns inte.");
 
-            // Kolla att serienumret inte redan används
             var exists = await _context.Scales
                 .AnyAsync(s => s.SerialNumber == dto.SerialNumber);
             if (exists)
@@ -157,24 +121,18 @@ namespace InventorySystem.API.Controllers
             return CreatedAtAction(nameof(GetScale), new { id = scale.Id }, result);
         }
 
-        /// <summary>
-        /// Uppdaterar en vågs serienummer och/eller team-tillhörighet.
-        /// </summary>
-        /// <param name="id">Vågens ID</param>
-        /// <param name="dto">Nya värden</param>
+        // Uppdaterar en vågs serienummer och/eller team-tillhörighet
         [HttpPut("{id}")]
-        //[Authorize(Policy = "ManagerOrAdmin")]
+        [Authorize(Policy = "ManagerOrAdmin")]
         public async Task<ActionResult> UpdateScale(int id, UpdateScaleDto dto)
         {
             var scale = await _context.Scales.FindAsync(id);
             if (scale == null) return NotFound();
 
-            // Kolla att teamet finns
             var team = await _context.Teams.FindAsync(dto.TeamId);
             if (team == null)
                 return BadRequest("Teamet finns inte.");
 
-            // Kolla att serienumret inte redan används av en annan våg
             var duplicate = await _context.Scales
                 .AnyAsync(s => s.SerialNumber == dto.SerialNumber && s.Id != id);
             if (duplicate)
@@ -187,12 +145,9 @@ namespace InventorySystem.API.Controllers
             return NoContent();
         }
 
-        /// <summary>
-        /// Tar bort en våg. Kräver Admin-roll.
-        /// </summary>
-        /// <param name="id">Vågens ID</param>
+        // Tar bort en våg. Kräver Admin-roll.
         [HttpDelete("{id}")]
-        //[Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> DeleteScale(int id)
         {
             var scale = await _context.Scales.FindAsync(id);

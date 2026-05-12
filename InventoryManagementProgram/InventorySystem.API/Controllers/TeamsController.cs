@@ -8,7 +8,7 @@ namespace InventorySystem.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize(Policy = "ManagerOrAdmin")]
+    [Authorize(Policy = "ManagerOrAdmin")]
     public class TeamsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -44,7 +44,7 @@ namespace InventorySystem.API.Controllers
 
         // POST: api/teams
         [HttpPost]
-        //[Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "AdminOnly")]
         public async Task<ActionResult<Team>> CreateTeam(Team team)
         {
             _context.Teams.Add(team);
@@ -54,7 +54,7 @@ namespace InventorySystem.API.Controllers
 
         // DELETE: api/teams/5
         [HttpDelete("{id}")]
-        //[Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "AdminOnly")]
         public async Task<IActionResult> DeleteTeam(int id)
         {
             var team = await _context.Teams.FindAsync(id);
