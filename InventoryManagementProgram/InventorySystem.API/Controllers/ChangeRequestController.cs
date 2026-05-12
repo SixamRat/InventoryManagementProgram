@@ -1,6 +1,7 @@
 ﻿using InventorySystem.API.Data;
 using InventorySystem.API.DTOs;
 using InventorySystem.API.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,6 +9,7 @@ namespace InventorySystem.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Policy = "AllRoles")]
     public class ChangeRequestsController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -50,12 +52,10 @@ namespace InventorySystem.API.Controllers
         public async Task<ActionResult<ChangeRequestDto>> CreateChangeRequest(
             CreateChangeRequestDto dto)
         {
-            // Kolla att vågen finns
             var scale = await _context.Scales.FindAsync(dto.ScaleId);
             if (scale == null)
                 return BadRequest("Vågen finns inte.");
 
-            // Kolla att användaren finns
             var user = await _context.Users.FindAsync(dto.CreatedByUserId);
             if (user == null)
                 return BadRequest("Användaren finns inte.");
@@ -88,53 +88,11 @@ namespace InventorySystem.API.Controllers
         }
 
         [HttpPut("{id}/review")]
+        [Authorize(Policy = "ManagerOrAdmin")]
         public async Task<ActionResult> ReviewChangeRequest(
             int id, ReviewChangeRequestDto dto)
         {
-            // Bara "Approved" och "Denied" är giltiga
             if (dto.Status != "Approved" && dto.Status != "Denied")
                 return BadRequest("Status måste vara 'Approved' eller 'Denied'.");
 
-            var changeRequest = await _context.ChangeRequests
-                .Include(c => c.Scale)
-                .FirstOrDefaultAsync(c => c.Id == id);
-
-            if (changeRequest == null)
-                return NotFound("Ändringsförslaget finns inte.");
-
-            if (changeRequest.Status != "Pending")
-                return BadRequest("Förslaget har redan hanterats.");
-
-            changeRequest.Status = dto.Status;
-
-            // Om chefen godkänner: uppdatera produkten på vågen
-            if (dto.Status == "Approved")
-            {
-                var existingProduct = await _context.Products
-                    .FirstOrDefaultAsync(p => p.ScaleId == changeRequest.ScaleId);
-
-                if (existingProduct != null)
-                {
-                    // Uppdatera befintlig produkt
-                    existingProduct.Name = changeRequest.ProposedProduct;
-                    existingProduct.Unit = changeRequest.ProposedUnit;
-                }
-                else
-                {
-                    // Skapa ny produkt på vågen
-                    var product = new Product
-                    {
-                        Name = changeRequest.ProposedProduct,
-                        Unit = changeRequest.ProposedUnit,
-                        ConversionFactor = 1.0,
-                        ScaleId = changeRequest.ScaleId
-                    };
-                    _context.Products.Add(product);
-                }
-            }
-
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-    }
-}
+            var changeRequest = await _context.ChangeRequ
