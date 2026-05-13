@@ -1,5 +1,6 @@
 ﻿using InventorySystem.API.Data;
 using InventorySystem.API.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -7,6 +8,7 @@ namespace InventorySystem.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize(Policy = "ManagerOrAdmin")]
     public class InventoryController : ControllerBase
     {
         private readonly AppDbContext _context;
@@ -62,7 +64,6 @@ namespace InventorySystem.API.Controllers
                 .OrderBy(i => i.ProductName)
                 .ToList();
 
-            // Filtrera på teamnamn
             string? teamName = null;
             if (teamId.HasValue)
             {

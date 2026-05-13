@@ -95,4 +95,43 @@ namespace InventorySystem.API.Controllers
             if (dto.Status != "Approved" && dto.Status != "Denied")
                 return BadRequest("Status måste vara 'Approved' eller 'Denied'.");
 
-            var changeRequest = await _context.ChangeRequ
+            var changeRequest = await _context.ChangeRequests
+                .Include(c => c.Scale)
+                .FirstOrDefaultAsync(c => c.Id == id);
+
+            if (changeRequest == null)
+                return NotFound("Ändringsförslaget finns inte.");
+
+            if (changeRequest.Status != "Pending")
+                return BadRequest("Förslaget har redan hanterats.");
+
+            changeRequest.Status = dto.Status;
+
+            if (dto.Status == "Approved")
+            {
+                var existingProduct = await _context.Products
+                    .FirstOrDefaultAsync(p => p.ScaleId == changeRequest.ScaleId);
+
+                if (existingProduct != null)
+                {
+                    existingProduct.Name = changeRequest.ProposedProduct;
+                    existingProduct.Unit = changeRequest.ProposedUnit;
+                }
+                else
+                {
+                    var product = new Product
+                    {
+                        Name = changeRequest.ProposedProduct,
+                        Unit = changeRequest.ProposedUnit,
+                        ConversionFactor = 1.0,
+                        ScaleId = changeRequest.ScaleId
+                    };
+                    _context.Products.Add(product);
+                }
+            }
+
+            await _context.SaveChangesAsync();
+            return NoContent();
+        }
+    }
+}

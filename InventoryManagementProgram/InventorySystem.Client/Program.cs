@@ -7,6 +7,10 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
+// Bygg API-adressen från webbläsarens hostname
+var currentHost = new Uri(builder.HostEnvironment.BaseAddress).Host;
+var apiBaseUrl = $"https://{currentHost}:7232";
+
 // MSAL-autentisering mot Entra ID
 builder.Services.AddMsalAuthentication(options =>
 {
@@ -16,17 +20,23 @@ builder.Services.AddMsalAuthentication(options =>
     );
 });
 
-// HttpClient MED auth för senare
+// Konfigurera auth-handler att skicka token till API:et
+builder.Services.AddScoped<AuthorizationMessageHandler>(sp =>
+{
+    var handler = sp.GetRequiredService<AuthorizationMessageHandler>();
+    handler.ConfigureHandler(
+        authorizedUrls: new[] { apiBaseUrl }
+    );
+    return handler;
+});
+
+// HttpClient MED auth
 builder.Services.AddHttpClient("InventoryAPI",
-    client => client.BaseAddress = new Uri(builder.Configuration["ApiSettings:BaseUrl"]!))
-    .AddHttpMessageHandler<BaseAddressAuthorizationMessageHandler>();
+    client => client.BaseAddress = new Uri(apiBaseUrl))
+    .AddHttpMessageHandler<AuthorizationMessageHandler>();
 
-// HttpClient UTAN auth för test
-builder.Services.AddHttpClient("PublicAPI",
-    client => client.BaseAddress = new Uri(builder.Configuration["ApiSettings:BaseUrl"]!));
-
-// Standard just nu
+// Standard HttpClient med auth
 builder.Services.AddScoped(sp =>
-    sp.GetRequiredService<IHttpClientFactory>().CreateClient("PublicAPI"));
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("InventoryAPI"));
 
 await builder.Build().RunAsync();

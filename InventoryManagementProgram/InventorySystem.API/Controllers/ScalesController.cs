@@ -59,7 +59,6 @@ namespace InventorySystem.API.Controllers
             return Ok(scales);
         }
         // Hämtar en specifik våg med ID.
-        name="id"
         [HttpGet("{id}")]
         public async Task<ActionResult<ScaleDto>> GetScale(int id)
         {
