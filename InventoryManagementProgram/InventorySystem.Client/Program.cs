@@ -1,4 +1,5 @@
 using InventorySystem.Client;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.Components.WebAssembly.Authentication;
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
@@ -7,7 +8,7 @@ var builder = WebAssemblyHostBuilder.CreateDefault(args);
 builder.RootComponents.Add<App>("#app");
 builder.RootComponents.Add<HeadOutlet>("head::after");
 
-// Bygg API-adressen från webbläsarens hostname
+// Bygg API-adressen dynamiskt från webbläsarens hostname
 var currentHost = new Uri(builder.HostEnvironment.BaseAddress).Host;
 var apiBaseUrl = $"https://{currentHost}:7232";
 
@@ -20,20 +21,17 @@ builder.Services.AddMsalAuthentication(options =>
     );
 });
 
-// Konfigurera auth-handler att skicka token till API:et
-builder.Services.AddScoped<AuthorizationMessageHandler>(sp =>
-{
-    var handler = sp.GetRequiredService<AuthorizationMessageHandler>();
-    handler.ConfigureHandler(
-        authorizedUrls: new[] { apiBaseUrl }
-    );
-    return handler;
-});
-
-// HttpClient MED auth
+// HttpClient MED auth 
 builder.Services.AddHttpClient("InventoryAPI",
     client => client.BaseAddress = new Uri(apiBaseUrl))
-    .AddHttpMessageHandler<AuthorizationMessageHandler>();
+    .AddHttpMessageHandler(sp =>
+    {
+        var provider = sp.GetRequiredService<IAccessTokenProvider>();
+        var navigation = sp.GetRequiredService<NavigationManager>();
+        var handler = new AuthorizationMessageHandler(provider, navigation);
+        handler.ConfigureHandler(authorizedUrls: new[] { apiBaseUrl });
+        return handler;
+    });
 
 // Standard HttpClient med auth
 builder.Services.AddScoped(sp =>
